@@ -44,6 +44,7 @@ int high_count = 0;                    // Counts switches from low to high
 bool is_high = false;                  // Tracks if the signal is currently above threshold
 const int sampling_interval_us = 10; // Sampling every 0.001ms (10us)
 const float period_20kHz = 0.00005f;   // 20 kHz period (50 us)
+float d = 0;
 
 float sk = 0.5f;           // Steering constant (range: 0.0 to 1.0) 
 float kp = 1.0f;           // Proportional gain constant 
@@ -110,11 +111,11 @@ void modeIndicator()
     }
     else if (mode == 1)
     {
-        led=1;
+        led=!led;
     }
     else if (mode == 2)
     {
-        led=!led;
+        led=1;
     }
     else
     {
@@ -186,6 +187,7 @@ void motorControlUpdate()
 {
     // Update the PWM output with the calculated duty cycle 
     motor_control_signal.write(motorDutyCycle); 
+    d = motor_control_signal;
 }
 
 void modeSwitch()
@@ -200,7 +202,7 @@ void modeSwitch()
     }
     else if (mode == 2)
     {
-        mode=3;
+        mode=0;
     }
     else
     {
@@ -227,13 +229,12 @@ int main()
     float integral = 0.0f; 
     float previousError = 0.0f; 
   
-    KD=0.1;
-    printf("\nKP,KD,Position,Control\n");
+    printf("\nKP\tKD\tPosition\tControl\tMotor\n");
 
     while (true) {
         //Following information printed so it can be copied into a csv file
         mode_indicator.update();
-        printf("%.4f,%.4f,%.4f,%.4f\n", KP,KD,feedback*3.3,u);
+        printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,feedback*3.3,u,d);
     
         //Run mode loop
         if(mode==2)
@@ -244,16 +245,16 @@ int main()
             motor_control_update_ticker.update();
             if (prevMode==1){ 
                 prevMode=2;
-                printf("\nRunMode\nKP,KD,Position,Control,Mode\n"); 
+                printf("\nRun Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
             }
         }
-        if(mode==0)
+        else if(mode==0)
         {
             steering_calculate_control_ticker.update(); 
             motor_calculate_control_ticker.update();
             if (prevMode==2){
                 prevMode=0;
-                printf("\nStopMode\nKP,KD,Position,Control,Mode\n"); 
+                printf("\nStop Mode\nKP\tKD\tPosition\tControl\tMotor\n");
             }
         }
        //Wait mode loop
@@ -263,7 +264,7 @@ int main()
             motor_calculate_control_ticker.update();
             if (prevMode==0){ 
                 prevMode=1;
-                printf("\nWaitMode\nKP,KD,Position,Control,Mode\n"); 
+                printf("\nWait Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
             }
         }
         else
