@@ -17,13 +17,14 @@ InterruptIn button(PC_13);  //PC13 is the pin dedicated to the blue user push bu
 DigitalOut led(PA_5); // Will be used to indicate whether we are in wait, stop, or go
 
 PwmOut servo_control_signal(PB_10);     //Define D6 as steering PWM output
-PwmOut motor_control_signal(PB_3);      //Define D3 as motor PWM output pin
+PwmOut motor_control_signal(PB_4);      //Define D5 as motor PWM output pin
 
 AnalogIn proportional_gain_input(PA_0);
 AnalogIn derivative_gain_input(PA_1);
+AnalogIn integral_gain_input(PA_4);          //PA_4 is pin A2
 AnalogIn right_position_sensor_input(PC_1); // PC_1 is input to pin A4
 AnalogIn left_position_sensor_input(PB_0);  // PB_0 is input to pin A3
-AnalogIn motor_input_signal(PA_4);          //PA_4 is pin A2
+
 
 // AnalogIn Battery_input_signal(PC_0)    //PC_0 is pin A5
 
@@ -36,6 +37,7 @@ float feedback = 0;
 float KP = 0;
 float KD = 0;
 float u = 0.075;
+float KI = 0;
 
 
 //Motor Variables
@@ -66,7 +68,7 @@ void modeIndicator();
 
 //Ticker setup
 Tickers steering_calculate_control_ticker(steeringCalculateControl, 1); 
-Tickers steering_control_update_ticker(steeringControlUpdate, 20);
+Tickers steering_control_update_ticker(steeringControlUpdate, 25);
 Tickers motor_calculate_control_ticker(motorControlUpdate, 1);
 Tickers motor_control_update_ticker(motorCalculateControl,100); 
 Tickers mode_indicator(modeIndicator, 100); 
@@ -83,10 +85,10 @@ void setPWMDutyCycle(float duty_cycle) {
     if (duty_cycle > 1.0f) duty_cycle = 1.0f;
     
     // Set the PWM period to 20 kHz (50 us)
-    motor_control_signal.period(SERVO_PERIOD);
+    motor_control_signal.period(period_20kHz);
 
     // Set the PWM pulse width based on the duty cycle
-    motor_control_signal.pulsewidth(SERVO_PERIOD * duty_cycle);
+    motor_control_signal.pulsewidth(period_20kHz * duty_cycle);
 }
 
 
@@ -116,11 +118,29 @@ void modeIndicator()
     else if (mode == 2)
     {
         led=1;
+        static int count = 0;
+        if (right_position_sensor_input.read() <= 0.05 & left_position_sensor_input.read() <= 0.05)
+        {
+            
+            if (count == 5)
+            {
+                mode = 1;
+                count = 0;
+            }
+            else {
+                count = count+1;
+            }
+
+        }
+        else {
+        count=0;
+        }
     }
     else
     {
         mode = 0;
     }
+
 }
 
 void calculateFeedback()
@@ -138,6 +158,11 @@ void readDerivativeGain()
     KD = 0.3*derivative_gain_input.read();
 }
 
+void readIntegralGain()
+{
+    KI = 0.3*integral_gain_input.read();
+}
+
 
 void steeringCalculateControl()
 {
@@ -146,13 +171,16 @@ void steeringCalculateControl()
 
     calculateFeedback();
     float error_current = REFERENCE-feedback;
-    readProportionalGain();
-    readDerivativeGain();
+    // readProportionalGain();
+    // readDerivativeGain();
+    // readIntegralGain();
     float errorChange = error_prior * (error_current-error_prior)/TI;
-    u = KP*error_current + KD*errorChange;
+    float area_current = TI*error_current+area_prior;
+    u = KP*error_current + KD*errorChange + KI*area_current;
     // printf("Controller Output: %.4f\n\n",controllerOutput);
     
     error_prior=error_current;
+    area_prior=area_current;
 
     u=(u+0.075);
 
@@ -166,7 +194,7 @@ void steeringCalculateControl()
         u = u;
     }
 
-    sk = (0.025 - abs(u-0.075))/0.025;
+    sk = 0.5*(0.025 - abs(u-0.075))/0.025;
 }
 
 
@@ -212,7 +240,7 @@ void modeSwitch()
 
 int main()
 {
-    
+    servo_control_signal.period(SERVO_PERIOD);
     
     button.rise(&modeSwitch);
     steering_calculate_control_ticker.start(); 
@@ -222,23 +250,25 @@ int main()
     mode_indicator.start();  
 
     
-    servo_control_signal.period(SERVO_PERIOD);
+    
     // Set the PWM frequency to 20 kHz 
     motor_control_signal.period(0.00005f); // 50 microseconds = 20 kHz frequency 
     // Variables for PI controller 
     float integral = 0.0f; 
     float previousError = 0.0f; 
   
-    printf("\nKP\tKD\tPosition\tControl\tMotor\n");
+    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\n");
 
     while (true) {
         //Following information printed so it can be copied into a csv file
         mode_indicator.update();
-        printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,feedback*3.3,u,d);
+        printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read());
     
+
         //Run mode loop
         if(mode==2)
         {
+
             steering_calculate_control_ticker.update(); 
             steering_control_update_ticker.update();
             motor_calculate_control_ticker.update();
@@ -247,11 +277,15 @@ int main()
                 prevMode=2;
                 printf("\nRun Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
             }
+
         }
         else if(mode==0)
         {
-            steering_calculate_control_ticker.update(); 
-            motor_calculate_control_ticker.update();
+            servo_control_signal = 0.075;
+            motor_control_signal = 0.0;
+            d=0;
+            // steering_calculate_control_ticker.update(); 
+            // motor_calculate_control_ticker.update();
             if (prevMode==2){
                 prevMode=0;
                 printf("\nStop Mode\nKP\tKD\tPosition\tControl\tMotor\n");
@@ -260,12 +294,18 @@ int main()
        //Wait mode loop
         else if(mode==1)
         {
-            steering_calculate_control_ticker.update(); 
-            motor_calculate_control_ticker.update();
-            if (prevMode==0){ 
+            servo_control_signal = 0.075;
+            motor_control_signal = 0.0;
+            // steering_calculate_control_ticker.update(); 
+            // motor_calculate_control_ticker.update();
+            readProportionalGain();
+            readDerivativeGain();
+            readIntegralGain();
+            if (prevMode==0 | prevMode==2){ 
                 prevMode=1;
                 printf("\nWait Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
             }
+            
         }
         else
         {
