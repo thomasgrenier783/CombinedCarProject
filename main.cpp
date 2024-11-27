@@ -119,7 +119,7 @@ void modeIndicator()
     {
         led=1;
         static int count = 0;
-        if (right_position_sensor_input.read() <= 0.05 & left_position_sensor_input.read() <= 0.05)
+        if (right_position_sensor_input.read() <= 0.005 & left_position_sensor_input.read() <= 0.005)
         {
             
             if (count == 5)
