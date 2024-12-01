@@ -13,15 +13,21 @@
 #define SERVO_PERIOD 0.02f
 #define REFERENCE 0.0f  //car should stay in center, so the reference should be zero
 
+
 InterruptIn button(PC_13);  //PC13 is the pin dedicated to the blue user push button
 DigitalOut led(PA_5); // Will be used to indicate whether we are in wait, stop, or go
 
 PwmOut servo_control_signal(PB_10);     //Define D6 as steering PWM output
 PwmOut motor_control_signal(PB_4);      //Define D5 as motor PWM output pin
 
-AnalogIn proportional_gain_input(PA_0);
-AnalogIn derivative_gain_input(PA_1);
-AnalogIn integral_gain_input(PA_4);          //PA_4 is pin A2
+AnalogOut brake_control_signal(PA_6);   // PA_6 is input to pin D12
+
+// AnalogIn proportional_gain_input(PA_0);
+// AnalogIn derivative_gain_input(PA_1);
+// AnalogIn integral_gain_input(PA_4);          //PA_4 is pin A2
+
+AnalogIn left_motor_speed_input(PA_1);      // PA_1 is input to pin A1
+AnalogIn right_motor_speed_input(PA_4);     // PA_4 is input to pin A2
 AnalogIn right_position_sensor_input(PC_1); // PC_1 is input to pin A4
 AnalogIn left_position_sensor_input(PB_0);  // PB_0 is input to pin A3
 
