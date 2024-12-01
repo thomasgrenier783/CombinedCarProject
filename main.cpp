@@ -42,10 +42,10 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0;
+float KP = 0.093;
 float KD = 0;
 float u = 0.075;
-float KI = 0;
+float KI = 0.04;
 
 
 //Motor Variables
@@ -61,6 +61,9 @@ float kp = 1.0f;           // Proportional gain constant
 float ki = 0.5f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
+float motor_ordered_speed = 0.0;
+
+float dvrm = 0.0;
 
 float motorDutyCycle;
 
@@ -104,18 +107,44 @@ void setPWMDutyCycle(float duty_cycle) {
     motor_control_signal.pulsewidth(period_20kHz * duty_cycle);
 }
 
+// Function to read digital feedback voltage 
+
+void getRightDigitalFeedbackVoltage() { 
+
+    dvrm = right_motor_speed_input.read(); 
+
+
+}// End of getRightFeedbackVoltage 
 
 // Function to calculate duty cycle with proportional gain
 float calculateDutyCycle(float sk, float kp) {
-    // Scale sk by kp to influence duty cycle mapping
-    float scaledSk = sk * kp;
+    // // Scale sk by kp to influence duty cycle mapping
+    // float scaledSk = sk * kp;
  
-    // Ensure scaledSk is clamped between 0 and 1
-    if (scaledSk > 1.0f) scaledSk = 1.0f;
-    if (scaledSk < 0.0f) scaledSk = 0.0f;
+    // // Ensure scaledSk is clamped between 0 and 1
+    // if (scaledSk > 1.0f) scaledSk = 1.0f;
+    // if (scaledSk < 0.0f) scaledSk = 0.0f;
  
-    // Map scaledSk to the duty cycle range (20% to 80%)
-    return 0.2f + (scaledSk * 0.6f);
+    // // Map scaledSk to the duty cycle range (20% to 80%)
+    // return 0.2f + (scaledSk * 0.6f);
+
+    static float area_prior=0;
+    static float error_prior=0;
+
+    float error_current = sk-dvrm;
+    // readProportionalGain();
+    // readDerivativeGain();
+    // readIntegralGain();
+    float errorChange = error_prior * (error_current-error_prior)/TI;
+    float area_current = TI*error_current+area_prior;
+    motor_ordered_speed = KP*error_current + KD*errorChange + KI*area_current;
+    // printf("Controller Output: %.4f\n\n",controllerOutput);
+    
+    error_prior=error_current;
+    area_prior=area_current;
+
+    return motor_ordered_speed;
+
 }
 
 void modeIndicator()
@@ -161,20 +190,20 @@ void calculateFeedback()
    feedback = (left_position_sensor_input - right_position_sensor_input);
 }
 
-void readProportionalGain()
-{
-    KP = 0.3*proportional_gain_input.read();
-}
+// void readProportionalGain()
+// {
+//     KP = 0.3*proportional_gain_input.read();
+// }
 
-void readDerivativeGain()
-{
-    KD = 0.3*derivative_gain_input.read();
-}
+// void readDerivativeGain()
+// {
+//     KD = 0.3*derivative_gain_input.read();
+// }
 
-void readIntegralGain()
-{
-    KI = 0.3*integral_gain_input.read();
-}
+// void readIntegralGain()
+// {
+//     KI = 0.3*integral_gain_input.read();
+// }
 
 void readBLV()
 {
@@ -335,9 +364,9 @@ int main()
             motor_control_signal = 0.0;
             // steering_calculate_control_ticker.update(); 
             // motor_calculate_control_ticker.update();
-            readProportionalGain();
-            readDerivativeGain();
-            readIntegralGain();
+            // readProportionalGain();
+            // readDerivativeGain();
+            // readIntegralGain();
             if (prevMode==0 | prevMode==2){ 
                 prevMode=1;
                 printf("\nWait Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
