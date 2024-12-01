@@ -26,9 +26,9 @@ AnalogIn right_position_sensor_input(PC_1); // PC_1 is input to pin A4
 AnalogIn left_position_sensor_input(PB_0);  // PB_0 is input to pin A3
 
 
-AnalogIn Battery_input_signal(PC_0);    //PC_0 is pin A5
-// AnalogIn Bumper_input_signal(##)
-// AnalogIn LDLED_input_signal(##)
+AnalogIn Battery_input_signal(PC_0);        //PC_0 is pin A5
+AnalogIn Left_Bumper_input_signal(PA_8);    //PA_8 is pin D8
+AnalogIn Right_Bumper_input_signal(PA_9);   //PA_9 is pin D7
 
 
 static int mode = 0;
@@ -208,6 +208,10 @@ void steeringCalculateControl()
     }
 
     sk = 0.5*(0.025 - abs(u-0.075))/0.025;
+    if (sk<=0.2)
+        sk=0.2;
+    if (sk>=0.8)
+        sk=0.8;
 }
 
 
@@ -275,18 +279,25 @@ int main()
     while (true) {
         //Following information printed so it can be copied into a csv file
         mode_indicator.update();
-	readBLV();
-        printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
+        readBLV();
+        
     	
-	if(BLV<4)
-	{
-		printf("Low Voltage");
-		mode=1;	
-	}
+
 	
         //Run mode loop
         if(mode==2)
         {
+            if(BLV<4)
+            {
+                printf("Low Voltage");
+                mode=1;	
+            }
+
+            if (Left_Bumper_input_signal.read()<0.5 | Right_Bumper_input_signal.read()<0.5)
+            {
+                printf("Bumper Stop");
+                mode=1;
+            }
 
             steering_calculate_control_ticker.update(); 
             steering_control_update_ticker.update();
@@ -296,6 +307,7 @@ int main()
                 prevMode=2;
                 printf("\nRun Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
             }
+            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
 
         }
         else if(mode==0)
@@ -324,6 +336,8 @@ int main()
                 prevMode=1;
                 printf("\nWait Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
             }
+            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
+
             
         }
         else
