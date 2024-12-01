@@ -26,7 +26,9 @@ AnalogIn right_position_sensor_input(PC_1); // PC_1 is input to pin A4
 AnalogIn left_position_sensor_input(PB_0);  // PB_0 is input to pin A3
 
 
-// AnalogIn Battery_input_signal(PC_0)    //PC_0 is pin A5
+AnalogIn Battery_input_signal(PC_0);    //PC_0 is pin A5
+// AnalogIn Bumper_input_signal(##)
+// AnalogIn LDLED_input_signal(##)
 
 
 static int mode = 0;
@@ -55,6 +57,11 @@ float integralMax = 0.3f;  // Maximum integral term for anti-windup
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
 
 float motorDutyCycle;
+
+// Independent variables 
+float BLV = 0;
+float BUMP = 0;
+float LDLED = 0;
 
 // Variables for PI controller 
 float integral = 0.0f; 
@@ -163,6 +170,12 @@ void readIntegralGain()
     KI = 0.3*integral_gain_input.read();
 }
 
+void readBLV()
+{
+  BLV = 7.2*Battery_input_signal.read()/0.85; //Battery used is 7.2V and the voltage divider used outputs 2.8 volts at full voltage. Divided by 3.3, that yields 0.85. 
+}
+// void readBUMP=
+
 
 void steeringCalculateControl()
 {
@@ -257,14 +270,20 @@ int main()
     float integral = 0.0f; 
     float previousError = 0.0f; 
   
-    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\n");
+    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tBatt V.\n");
 
     while (true) {
         //Following information printed so it can be copied into a csv file
         mode_indicator.update();
-        printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read());
-    
-
+	readBLV();
+        printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
+    	
+	if(BLV<4)
+	{
+		printf("Low Voltage");
+		mode=1;	
+	}
+	
         //Run mode loop
         if(mode==2)
         {
