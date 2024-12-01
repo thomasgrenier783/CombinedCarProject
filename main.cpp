@@ -36,6 +36,9 @@ AnalogIn Battery_input_signal(PC_0);        //PC_0 is pin A5
 AnalogIn Left_Bumper_input_signal(PA_8);    //PA_8 is pin D8
 AnalogIn Right_Bumper_input_signal(PA_9);   //PA_9 is pin D7
 
+string dataHeader = "\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\n";
+
+
 
 static int mode = 0;
 static int prevMode = 0;
@@ -309,7 +312,7 @@ int main()
     float integral = 0.0f; 
     float previousError = 0.0f; 
   
-    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tBatt V.\n");
+    printf(dataHeader);
 
     while (true) {
         //Following information printed so it can be copied into a csv file
@@ -340,7 +343,7 @@ int main()
             motor_control_update_ticker.update();
             if (prevMode==1){ 
                 prevMode=2;
-                printf("\nRun Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
+            printf(dataHeader);
             }
             printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
 
@@ -354,7 +357,7 @@ int main()
             // motor_calculate_control_ticker.update();
             if (prevMode==2){
                 prevMode=0;
-                printf("\nStop Mode\nKP\tKD\tPosition\tControl\tMotor\n");
+                printf(dataHeader);
             }
         }
        //Wait mode loop
@@ -369,7 +372,7 @@ int main()
             // readIntegralGain();
             if (prevMode==0 | prevMode==2){ 
                 prevMode=1;
-                printf("\nWait Mode\nKP\tKD\tPosition\tControl\tMotor\n"); 
+                printf(dataHeader); 
             }
             printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
 
