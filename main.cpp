@@ -47,7 +47,7 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.015;   //best = 0.125    
+float KP = 0.0145;   //best = 0.125    
 float KD = 0.0;
 float u = 0.075;
 float KI = 0.06;    //best = 0.05
