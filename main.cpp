@@ -62,7 +62,7 @@ const float period_20kHz = 0.00005f;   // 20 kHz period (50 us)
 float d = 0;
 
 float sk = 0.5f;           // Steering constant (range: 0.0 to 1.0) 
-float kp = 0.3f;           // Proportional gain constant 
+float kp = 0.325f;           // Proportional gain constant 
 float ki = 0.02f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
