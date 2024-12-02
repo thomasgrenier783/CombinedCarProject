@@ -12,7 +12,7 @@ float TI=0.001;   //1kHz sample time
 #define DELAY 1ms
 #define SERVO_PERIOD 0.02f
 #define REFERENCE 0.0f  //car should stay in center, so the reference should be zero
-#define SKMULTIPLIER 1.25f   //best =0.4f
+#define SKMULTIPLIER 1.0f   //best =0.4f
 
 InterruptIn button(PC_13);  //PC13 is the pin dedicated to the blue user push button
 InterruptIn landmarkDetection(PA_0);
@@ -47,10 +47,10 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.035;   //best = 0.125    
+float KP = 0.015;   //best = 0.125    
 float KD = 0.0;
 float u = 0.075;
-float KI = 0.0125;    //best = 0.05
+float KI = 0.06;    //best = 0.05
 
 
 //Motor Variables
@@ -62,7 +62,7 @@ const float period_20kHz = 0.00005f;   // 20 kHz period (50 us)
 float d = 0;
 
 float sk = 0.5f;           // Steering constant (range: 0.0 to 1.0) 
-float kp = 0.375f;           // Proportional gain constant 
+float kp = 0.3f;           // Proportional gain constant 
 float ki = 0.02f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
@@ -97,7 +97,7 @@ Tickers steering_control_update_ticker(steeringControlUpdate, 1);
 Tickers motor_calculate_control_ticker(motorCalculateControl, 1);
 Tickers motor_control_update_ticker(motorControlUpdate,1); 
 Tickers mode_indicator(modeIndicator, 100); 
-Tickers departure_detection(extracted,50);
+Tickers departure_detection(extracted,100);
 
 // Function to map a range 
 float mapRange(float value, float inMin, float inMax, float outMin, float outMax) { 
@@ -196,10 +196,10 @@ float calculateRightDutyCycle(float sk, float kp) {
 
 void extracted() {
   static int count = 0;
-  if (right_position_sensor_input.read() <= 0.005 &
-      left_position_sensor_input.read() <= 0.005) {
+  if (right_position_sensor_input.read() ==0 &
+      left_position_sensor_input.read() ==0) {
 
-    if (count == 5) {
+    if (count == 20) {
       mode = 1;
       count = 0;
     } else {
@@ -224,6 +224,9 @@ void modeIndicator() {
 
 void calculateFeedback()
 {
+    // static float filtered_right_position = 0;
+    // if (right_position_sensor_input <= 0.02)
+    //     filtered_right_position = 0;
    feedback = (left_position_sensor_input - right_position_sensor_input);
 }
 
@@ -387,7 +390,7 @@ int main()
         //Run mode loop
         if(mode==2)
         {
-            if(BLV<4)
+            if(BLV<5.5)
             {
                 printf("Low Voltage");
                 mode=1;	
