@@ -19,7 +19,7 @@ DigitalOut led(PA_5); // Will be used to indicate whether we are in wait, stop, 
 
 PwmOut servo_control_signal(PB_10);         //Define D6 as steering PWM output
 PwmOut left_motor_control_signal(PB_4);     //Define D5 as motor PWM output pin
-PwmOut right_motor_control_signal(PB_3);    //Define D3 as right motor PWM output pin
+PwmOut right_motor_control_signal(PB_6);    //Define D10 as right motor PWM output pin
 
 AnalogOut brake_control_signal(PA_6);   // PA_6 is input to pin D12
 
@@ -46,10 +46,10 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.07;
+float KP = 0.125;
 float KD = 0;
 float u = 0.075;
-float KI = 0.02;
+float KI = 0.05;
 
 
 //Motor Variables
@@ -205,10 +205,10 @@ void modeIndicator()
     {
         led=1;
         static int count = 0;
-        if (right_position_sensor_input.read() <= 0.05 & left_position_sensor_input.read() <= 0.05)
+        if (right_position_sensor_input.read() <= 0.005 & left_position_sensor_input.read() <= 0.005)
         {
             
-            if (count == 5)
+            if (count == 4)
             {
                 mode = 1;
                 count = 0;
@@ -219,7 +219,7 @@ void modeIndicator()
 
         }
         else {
-        count=0;
+            count=0;
         }
     }
     else
@@ -287,8 +287,8 @@ void steeringCalculateControl()
     }
 
     sk = SKMULTIPLIER*(0.025 - abs(u-0.075))/0.025;
-    if (sk<=0.35)
-        sk=0.35;
+    if (sk<=0.25)
+        sk=0.25;
     if (sk>=0.75)
         sk=.75;
 }
@@ -315,15 +315,15 @@ void motorCalculateControl()
         leftMotorDutyCycle = 0.5;
         rightMotorDutyCycle = 0.5;
     }
-    if (leftMotorDutyCycle<=0.3)
-        leftMotorDutyCycle=0.3;
-    if (leftMotorDutyCycle>=1.0)
-        leftMotorDutyCycle=1.0;
+    if (leftMotorDutyCycle<=0.2)
+        leftMotorDutyCycle=0.2;
+    if (leftMotorDutyCycle>=0.85)
+        leftMotorDutyCycle=0.85;
 
-    if (rightMotorDutyCycle<=0.3)
-        rightMotorDutyCycle=0.3;
-    if (rightMotorDutyCycle>=1.0)
-        rightMotorDutyCycle=1.0;
+    if (rightMotorDutyCycle<=0.2)
+        rightMotorDutyCycle=0.2;
+    if (rightMotorDutyCycle>=0.85)
+        rightMotorDutyCycle=0.85;
 }
 
 void motorControlUpdate()
@@ -369,6 +369,7 @@ int main()
     
     // Set the PWM frequency to 20 kHz 
     left_motor_control_signal.period(0.00005f); // 50 microseconds = 20 kHz frequency 
+    right_motor_control_signal.period(0.00005f);
     // Variables for PI controller 
     float integral = 0.0f; 
     float previousError = 0.0f; 
