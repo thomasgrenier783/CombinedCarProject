@@ -12,9 +12,10 @@ float TI=0.001;   //1kHz sample time
 #define DELAY 1ms
 #define SERVO_PERIOD 0.02f
 #define REFERENCE 0.0f  //car should stay in center, so the reference should be zero
-#define SKMULTIPLIER 1.0f   //best =0.4f
+#define SKMULTIPLIER 1.25f   //best =0.4f
 
 InterruptIn button(PC_13);  //PC13 is the pin dedicated to the blue user push button
+InterruptIn landmarkDetection(PA_0);
 DigitalOut led(PA_5); // Will be used to indicate whether we are in wait, stop, or go
 
 PwmOut servo_control_signal(PB_10);         //Define D6 as steering PWM output
@@ -39,17 +40,17 @@ AnalogIn Right_Bumper_input_signal(PA_9);   //PA_9 is pin D7
 
 // string dataHeader = "\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\n";
 
-
+int landmarkCounter = 0;
 
 static int mode = 0;
 static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.15;   //best = 0.125    
+float KP = 0.035;   //best = 0.125    
 float KD = 0.0;
 float u = 0.075;
-float KI = 0.075;    //best = 0.05
+float KI = 0.0125;    //best = 0.05
 
 
 //Motor Variables
@@ -61,8 +62,8 @@ const float period_20kHz = 0.00005f;   // 20 kHz period (50 us)
 float d = 0;
 
 float sk = 0.5f;           // Steering constant (range: 0.0 to 1.0) 
-float kp = .25f;           // Proportional gain constant 
-float ki = 0.125f;           // Integral gain constant 
+float kp = 0.375f;           // Proportional gain constant 
+float ki = 0.02f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
 float left_motor_ordered_speed = 0.5;
@@ -92,9 +93,9 @@ void extracted();
 
 //Ticker setup
 Tickers steering_calculate_control_ticker(steeringCalculateControl, 1); 
-Tickers steering_control_update_ticker(steeringControlUpdate, 5);
+Tickers steering_control_update_ticker(steeringControlUpdate, 1);
 Tickers motor_calculate_control_ticker(motorCalculateControl, 1);
-Tickers motor_control_update_ticker(motorControlUpdate,50); 
+Tickers motor_control_update_ticker(motorControlUpdate,1); 
 Tickers mode_indicator(modeIndicator, 100); 
 Tickers departure_detection(extracted,50);
 
@@ -198,7 +199,7 @@ void extracted() {
   if (right_position_sensor_input.read() <= 0.005 &
       left_position_sensor_input.read() <= 0.005) {
 
-    if (count == 4) {
+    if (count == 5) {
       mode = 1;
       count = 0;
     } else {
@@ -281,8 +282,8 @@ void steeringCalculateControl()
     sk = SKMULTIPLIER*(0.025 - abs(u-0.075))/0.025;
     if (sk<=0.25)
         sk=0.25;
-    if (sk>=0.75)
-        sk=.75;
+    if (sk>=0.95)
+        sk=.95;
 }
 
 
@@ -309,13 +310,13 @@ void motorCalculateControl()
     }
     if (leftMotorDutyCycle<=0.2)
         leftMotorDutyCycle=0.2;
-    if (leftMotorDutyCycle>=0.8)
-        leftMotorDutyCycle=0.8;
+    if (leftMotorDutyCycle>=1)
+        leftMotorDutyCycle=1;
 
     if (rightMotorDutyCycle<=0.2)
         rightMotorDutyCycle=0.2;
-    if (rightMotorDutyCycle>=0.8)
-        rightMotorDutyCycle=0.8;
+    if (rightMotorDutyCycle>=1)
+        rightMotorDutyCycle=1;
 }
 
 void motorControlUpdate()
@@ -346,11 +347,17 @@ void modeSwitch()
     }
 }
 
+void landmarkUpdate()
+{
+    landmarkCounter = landmarkCounter+1;
+}
+
 int main()
 {
     servo_control_signal.period(SERVO_PERIOD);
     
     button.rise(&modeSwitch);
+    landmarkDetection.rise(&landmarkUpdate);
     steering_calculate_control_ticker.start(); 
     steering_control_update_ticker.start();
     motor_calculate_control_ticker.start();
@@ -367,7 +374,7 @@ int main()
     float integral = 0.0f; 
     float previousError = 0.0f; 
   
-    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
+    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\tLandmarks\n");
 
     while (true) {
         //Following information printed so it can be copied into a csv file
@@ -402,9 +409,9 @@ int main()
             departure_detection.update();
             if (prevMode==1){ 
                 prevMode=2;
-            printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
+            printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\tLandmarks\n");
             }
-            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4d\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV,left_motor_rpm);
+            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4d\t%2d\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV,left_motor_rpm,landmarkCounter);
 
         }
         else if(mode==0)
@@ -436,7 +443,7 @@ int main()
                 prevMode=1;
                 printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
             }
-            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4d\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV,left_motor_rpm);
+            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4d\t%2d\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV,left_motor_rpm,landmarkCounter);
 
             
         }
