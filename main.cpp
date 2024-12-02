@@ -12,13 +12,14 @@
 #define DELAY 1ms
 #define SERVO_PERIOD 0.02f
 #define REFERENCE 0.0f  //car should stay in center, so the reference should be zero
-
+#define SKMULTIPLIER 0.4f
 
 InterruptIn button(PC_13);  //PC13 is the pin dedicated to the blue user push button
 DigitalOut led(PA_5); // Will be used to indicate whether we are in wait, stop, or go
 
-PwmOut servo_control_signal(PB_10);     //Define D6 as steering PWM output
-PwmOut motor_control_signal(PB_4);      //Define D5 as motor PWM output pin
+PwmOut servo_control_signal(PB_10);         //Define D6 as steering PWM output
+PwmOut left_motor_control_signal(PB_4);     //Define D5 as motor PWM output pin
+PwmOut right_motor_control_signal(PB_3);    //Define D3 as right motor PWM output pin
 
 AnalogOut brake_control_signal(PA_6);   // PA_6 is input to pin D12
 
@@ -36,7 +37,7 @@ AnalogIn Battery_input_signal(PC_0);        //PC_0 is pin A5
 AnalogIn Left_Bumper_input_signal(PA_8);    //PA_8 is pin D8
 AnalogIn Right_Bumper_input_signal(PA_9);   //PA_9 is pin D7
 
-string dataHeader = "\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\n";
+// string dataHeader = "\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\n";
 
 
 
@@ -45,10 +46,10 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.093;
+float KP = 0.07;
 float KD = 0;
 float u = 0.075;
-float KI = 0.04;
+float KI = 0.02;
 
 
 //Motor Variables
@@ -64,11 +65,14 @@ float kp = 1.0f;           // Proportional gain constant
 float ki = 0.5f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
-float motor_ordered_speed = 0.0;
+float left_motor_ordered_speed = 0.5;
+float right_motor_ordered_speed = 0.5;
+int left_motor_rpm = 0;
 
 float dvrm = 0.0;
 
-float motorDutyCycle;
+float leftMotorDutyCycle;
+float rightMotorDutyCycle;
 
 // Independent variables 
 float BLV = 0;
@@ -104,23 +108,32 @@ void setPWMDutyCycle(float duty_cycle) {
     if (duty_cycle > 1.0f) duty_cycle = 1.0f;
     
     // Set the PWM period to 20 kHz (50 us)
-    motor_control_signal.period(period_20kHz);
+    left_motor_control_signal.period(period_20kHz);
+    right_motor_control_signal.period(period_20kHz);
 
     // Set the PWM pulse width based on the duty cycle
-    motor_control_signal.pulsewidth(period_20kHz * duty_cycle);
+    left_motor_control_signal.pulsewidth(period_20kHz * duty_cycle);
+    right_motor_control_signal.pulsewidth(period_20kHz * duty_cycle);
 }
 
 // Function to read digital feedback voltage 
+
+void getLeftDigitalFeedbackVoltage() { 
+
+    dvrm = left_motor_speed_input.read(); 
+
+
+}// End of getRightFeedbackVoltage 
 
 void getRightDigitalFeedbackVoltage() { 
 
     dvrm = right_motor_speed_input.read(); 
 
 
-}// End of getRightFeedbackVoltage 
+}// End of getRightFeedbackVoltage
 
 // Function to calculate duty cycle with proportional gain
-float calculateDutyCycle(float sk, float kp) {
+float calculateLeftDutyCycle(float sk, float kp) {
     // // Scale sk by kp to influence duty cycle mapping
     // float scaledSk = sk * kp;
  
@@ -134,19 +147,47 @@ float calculateDutyCycle(float sk, float kp) {
     static float area_prior=0;
     static float error_prior=0;
 
+    getLeftDigitalFeedbackVoltage();
+
     float error_current = sk-dvrm;
-    // readProportionalGain();
-    // readDerivativeGain();
-    // readIntegralGain();
-    float errorChange = error_prior * (error_current-error_prior)/TI;
+
     float area_current = TI*error_current+area_prior;
-    motor_ordered_speed = KP*error_current + KD*errorChange + KI*area_current;
+    left_motor_ordered_speed = kp*error_current + ki*area_current;
     // printf("Controller Output: %.4f\n\n",controllerOutput);
     
     error_prior=error_current;
     area_prior=area_current;
 
-    return motor_ordered_speed;
+    return left_motor_ordered_speed;
+
+}
+
+float calculateRightDutyCycle(float sk, float kp) {
+    // // Scale sk by kp to influence duty cycle mapping
+    // float scaledSk = sk * kp;
+ 
+    // // Ensure scaledSk is clamped between 0 and 1
+    // if (scaledSk > 1.0f) scaledSk = 1.0f;
+    // if (scaledSk < 0.0f) scaledSk = 0.0f;
+ 
+    // // Map scaledSk to the duty cycle range (20% to 80%)
+    // return 0.2f + (scaledSk * 0.6f);
+
+    static float area_prior=0;
+    static float error_prior=0;
+
+    getRightDigitalFeedbackVoltage();
+
+    float error_current = sk-dvrm;
+
+    float area_current = TI*error_current+area_prior;
+    right_motor_ordered_speed = kp*error_current + ki*area_current;
+    // printf("Controller Output: %.4f\n\n",controllerOutput);
+    
+    error_prior=error_current;
+    area_prior=area_current;
+
+    return right_motor_ordered_speed;
 
 }
 
@@ -164,7 +205,7 @@ void modeIndicator()
     {
         led=1;
         static int count = 0;
-        if (right_position_sensor_input.read() <= 0.005 & left_position_sensor_input.read() <= 0.005)
+        if (right_position_sensor_input.read() <= 0.05 & left_position_sensor_input.read() <= 0.05)
         {
             
             if (count == 5)
@@ -245,11 +286,11 @@ void steeringCalculateControl()
         u = u;
     }
 
-    sk = 0.5*(0.025 - abs(u-0.075))/0.025;
-    if (sk<=0.2)
-        sk=0.2;
-    if (sk>=0.8)
-        sk=0.8;
+    sk = SKMULTIPLIER*(0.025 - abs(u-0.075))/0.025;
+    if (sk<=0.35)
+        sk=0.35;
+    if (sk>=0.75)
+        sk=.75;
 }
 
 
@@ -262,15 +303,35 @@ void steeringControlUpdate(void){
 
 void motorCalculateControl()
 {
+    static bool start = true;
     // Calculate the duty cycle based on sk and kp
-    motorDutyCycle = calculateDutyCycle(sk, kp);
+    leftMotorDutyCycle = calculateLeftDutyCycle(sk, kp);
+    rightMotorDutyCycle = calculateRightDutyCycle(sk, kp);
+    // motorDutyCycle = 0.2;
+    left_motor_rpm = dvrm*1800;
+    if (start == true)
+    {    
+        start = false;
+        leftMotorDutyCycle = 0.5;
+        rightMotorDutyCycle = 0.5;
+    }
+    if (leftMotorDutyCycle<=0.3)
+        leftMotorDutyCycle=0.3;
+    if (leftMotorDutyCycle>=1.0)
+        leftMotorDutyCycle=1.0;
+
+    if (rightMotorDutyCycle<=0.3)
+        rightMotorDutyCycle=0.3;
+    if (rightMotorDutyCycle>=1.0)
+        rightMotorDutyCycle=1.0;
 }
 
 void motorControlUpdate()
 {
     // Update the PWM output with the calculated duty cycle 
-    motor_control_signal.write(motorDutyCycle); 
-    d = motor_control_signal;
+    left_motor_control_signal.write(leftMotorDutyCycle);
+    right_motor_control_signal.write(rightMotorDutyCycle); 
+    d = left_motor_control_signal;
 }
 
 void modeSwitch()
@@ -307,12 +368,12 @@ int main()
     
     
     // Set the PWM frequency to 20 kHz 
-    motor_control_signal.period(0.00005f); // 50 microseconds = 20 kHz frequency 
+    left_motor_control_signal.period(0.00005f); // 50 microseconds = 20 kHz frequency 
     // Variables for PI controller 
     float integral = 0.0f; 
     float previousError = 0.0f; 
   
-    printf(dataHeader);
+    printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
 
     while (true) {
         //Following information printed so it can be copied into a csv file
@@ -343,28 +404,31 @@ int main()
             motor_control_update_ticker.update();
             if (prevMode==1){ 
                 prevMode=2;
-            printf(dataHeader);
+            printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
             }
-            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
+            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4d\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV,left_motor_rpm);
 
         }
         else if(mode==0)
         {
             servo_control_signal = 0.075;
-            motor_control_signal = 0.0;
+            left_motor_control_signal = 0.0;
+            right_motor_control_signal = 0.0;
             d=0;
             // steering_calculate_control_ticker.update(); 
             // motor_calculate_control_ticker.update();
             if (prevMode==2){
                 prevMode=0;
-                printf(dataHeader);
+            printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
             }
+
         }
        //Wait mode loop
         else if(mode==1)
         {
             servo_control_signal = 0.075;
-            motor_control_signal = 0.0;
+            left_motor_control_signal = 0.0;
+            right_motor_control_signal = 0.0;
             // steering_calculate_control_ticker.update(); 
             // motor_calculate_control_ticker.update();
             // readProportionalGain();
@@ -372,9 +436,9 @@ int main()
             // readIntegralGain();
             if (prevMode==0 | prevMode==2){ 
                 prevMode=1;
-                printf(dataHeader); 
+                printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
             }
-            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV);
+            printf("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4d\n", KP,KD,KI,feedback*3.3,u,d,right_position_sensor_input.read(),left_position_sensor_input.read(),BLV,left_motor_rpm);
 
             
         }
