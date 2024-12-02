@@ -8,17 +8,17 @@
 // #include <chrono>
 
 
-#define TI 0.001    //1kHz sample time
+float TI=0.001;   //1kHz sample time
 #define DELAY 1ms
 #define SERVO_PERIOD 0.02f
 #define REFERENCE 0.0f  //car should stay in center, so the reference should be zero
-#define SKMULTIPLIER 0.4f
+#define SKMULTIPLIER 1.0f   //best =0.4f
 
 InterruptIn button(PC_13);  //PC13 is the pin dedicated to the blue user push button
 DigitalOut led(PA_5); // Will be used to indicate whether we are in wait, stop, or go
 
 PwmOut servo_control_signal(PB_10);         //Define D6 as steering PWM output
-PwmOut left_motor_control_signal(PB_4);     //Define D5 as motor PWM output pin
+PwmOut left_motor_control_signal(PA_7);     //Define D11 as motor PWM output pin
 PwmOut right_motor_control_signal(PB_6);    //Define D10 as right motor PWM output pin
 
 AnalogOut brake_control_signal(PA_6);   // PA_6 is input to pin D12
@@ -46,10 +46,10 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.125;
-float KD = 0;
+float KP = 0.15;   //best = 0.125    
+float KD = 0.0;
 float u = 0.075;
-float KI = 0.05;
+float KI = 0.075;    //best = 0.05
 
 
 //Motor Variables
@@ -61,8 +61,8 @@ const float period_20kHz = 0.00005f;   // 20 kHz period (50 us)
 float d = 0;
 
 float sk = 0.5f;           // Steering constant (range: 0.0 to 1.0) 
-float kp = 1.0f;           // Proportional gain constant 
-float ki = 0.5f;           // Integral gain constant 
+float kp = .25f;           // Proportional gain constant 
+float ki = 0.125f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
 float left_motor_ordered_speed = 0.5;
@@ -88,13 +88,15 @@ void steeringControlUpdate();
 void motorControlUpdate();
 void motorCalculateControl();
 void modeIndicator();
+void extracted();
 
 //Ticker setup
 Tickers steering_calculate_control_ticker(steeringCalculateControl, 1); 
-Tickers steering_control_update_ticker(steeringControlUpdate, 25);
-Tickers motor_calculate_control_ticker(motorControlUpdate, 1);
-Tickers motor_control_update_ticker(motorCalculateControl,100); 
+Tickers steering_control_update_ticker(steeringControlUpdate, 5);
+Tickers motor_calculate_control_ticker(motorCalculateControl, 1);
+Tickers motor_control_update_ticker(motorControlUpdate,50); 
 Tickers mode_indicator(modeIndicator, 100); 
+Tickers departure_detection(extracted,50);
 
 // Function to map a range 
 float mapRange(float value, float inMin, float inMax, float outMin, float outMax) { 
@@ -191,42 +193,32 @@ float calculateRightDutyCycle(float sk, float kp) {
 
 }
 
-void modeIndicator()
-{
-    if (mode==0)
-    {
-        led=0;
-    }
-    else if (mode == 1)
-    {
-        led=!led;
-    }
-    else if (mode == 2)
-    {
-        led=1;
-        static int count = 0;
-        if (right_position_sensor_input.read() <= 0.005 & left_position_sensor_input.read() <= 0.005)
-        {
-            
-            if (count == 4)
-            {
-                mode = 1;
-                count = 0;
-            }
-            else {
-                count = count+1;
-            }
+void extracted() {
+  static int count = 0;
+  if (right_position_sensor_input.read() <= 0.005 &
+      left_position_sensor_input.read() <= 0.005) {
 
-        }
-        else {
-            count=0;
-        }
-    }
-    else
-    {
-        mode = 0;
+    if (count == 4) {
+      mode = 1;
+      count = 0;
+    } else {
+      count = count + 1;
     }
 
+  } else {
+    count = 0;
+  }
+}
+void modeIndicator() {
+  if (mode == 0) {
+    led = 0;
+  } else if (mode == 1) {
+    led = !led;
+  } else if (mode == 2) {
+    led = 1;
+  } else {
+    mode = 0;
+  }
 }
 
 void calculateFeedback()
@@ -317,13 +309,13 @@ void motorCalculateControl()
     }
     if (leftMotorDutyCycle<=0.2)
         leftMotorDutyCycle=0.2;
-    if (leftMotorDutyCycle>=0.85)
-        leftMotorDutyCycle=0.85;
+    if (leftMotorDutyCycle>=0.8)
+        leftMotorDutyCycle=0.8;
 
     if (rightMotorDutyCycle<=0.2)
         rightMotorDutyCycle=0.2;
-    if (rightMotorDutyCycle>=0.85)
-        rightMotorDutyCycle=0.85;
+    if (rightMotorDutyCycle>=0.8)
+        rightMotorDutyCycle=0.8;
 }
 
 void motorControlUpdate()
@@ -363,7 +355,8 @@ int main()
     steering_control_update_ticker.start();
     motor_calculate_control_ticker.start();
     motor_control_update_ticker.start(); 
-    mode_indicator.start();  
+    mode_indicator.start(); 
+    departure_detection.start(); 
 
     
     
@@ -398,11 +391,15 @@ int main()
                 printf("Bumper Stop");
                 mode=1;
             }
-
+            // TI = (float)steering_calculate_control_ticker.elapsed()/1000;
             steering_calculate_control_ticker.update(); 
+            // TI = (float)steering_control_update_ticker.elapsed()/1000;
             steering_control_update_ticker.update();
+            // TI = (float)motor_calculate_control_ticker.elapsed()/1000;
             motor_calculate_control_ticker.update();
+            // TI = (float)motor_control_update_ticker.elapsed()/1000;
             motor_control_update_ticker.update();
+            departure_detection.update();
             if (prevMode==1){ 
                 prevMode=2;
             printf("\nKP\tKD\tKI\tPosition\tControl\tMotor\tRight Sensor\tLeft Sensor\tBatt V.\tLMRPM\n");
