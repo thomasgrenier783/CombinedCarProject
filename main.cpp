@@ -47,10 +47,10 @@ static int prevMode = 0;
 
 //Steering Variables
 float feedback = 0;
-float KP = 0.0145;   //best = 0.125    
-float KD = 0.0;
+float KP = 0.0175;   //best = 0.125    
+float KD = 0.000005;
 float u = 0.075;
-float KI = 0.06;    //best = 0.05
+float KI = 0.085;    //best = 0.05
 
 
 //Motor Variables
@@ -63,7 +63,7 @@ float d = 0;
 
 float sk = 0.5f;           // Steering constant (range: 0.0 to 1.0) 
 float kp = 0.325f;           // Proportional gain constant 
-float ki = 0.02f;           // Integral gain constant 
+float ki = 0.025f;           // Integral gain constant 
 float integralMax = 0.3f;  // Maximum integral term for anti-windup 
 float integralMin = -0.3f; // Minimum integral term for anti-windup 
 float left_motor_ordered_speed = 0.5;
@@ -120,6 +120,16 @@ void setPWMDutyCycle(float duty_cycle) {
 }
 
 // Function to read digital feedback voltage 
+
+void brakingActivate()
+{
+    brake_control_signal = 1;
+}
+
+void brakingDeactivate()
+{
+    brake_control_signal=0;
+}
 
 void getLeftDigitalFeedbackVoltage() { 
 
@@ -196,10 +206,10 @@ float calculateRightDutyCycle(float sk, float kp) {
 
 void extracted() {
   static int count = 0;
-  if (right_position_sensor_input.read() ==0 &
-      left_position_sensor_input.read() ==0) {
+  if (right_position_sensor_input.read() <=0.05 &
+      left_position_sensor_input.read() <=0.05) {
 
-    if (count == 20) {
+    if (count == 5) {
       mode = 1;
       count = 0;
     } else {
@@ -257,6 +267,9 @@ void steeringCalculateControl()
     static float area_prior=0;
     static float error_prior=0;
 
+    static float uprior = 0;
+    static float uError = 0;
+
     calculateFeedback();
     float error_current = REFERENCE-feedback;
     // readProportionalGain();
@@ -282,17 +295,23 @@ void steeringCalculateControl()
         u = u;
     }
 
-    sk = SKMULTIPLIER*(0.025 - abs(u-0.075))/0.025;
+    uError = -abs(u-uprior);
+    uprior = u;
+    sk = SKMULTIPLIER*(uError+.05)/0.05;
+
+    // sk = SKMULTIPLIER*(0.025 - abs(u-0.075))/0.025;
     if (sk<=0.25)
         sk=0.25;
-    if (sk>=0.95)
-        sk=.95;
+    if (sk>=0.8)
+        sk=.8;
+
+    
 }
 
 
 
 void steeringControlUpdate(void){
-  
+    
     servo_control_signal=u;
     
 }
@@ -313,17 +332,23 @@ void motorCalculateControl()
     }
     if (leftMotorDutyCycle<=0.2)
         leftMotorDutyCycle=0.2;
-    if (leftMotorDutyCycle>=1)
-        leftMotorDutyCycle=1;
+    if (leftMotorDutyCycle>=0.95)
+        leftMotorDutyCycle=0.95;
 
     if (rightMotorDutyCycle<=0.2)
         rightMotorDutyCycle=0.2;
-    if (rightMotorDutyCycle>=1)
-        rightMotorDutyCycle=1;
+    if (rightMotorDutyCycle>=0.95)
+        rightMotorDutyCycle=0.95;
 }
 
 void motorControlUpdate()
 {
+    static float dcprev = 0;
+    if (abs(leftMotorDutyCycle-dcprev)>0.02)
+        brakingActivate();
+    else
+     brakingDeactivate();
+    dcprev = leftMotorDutyCycle;
     // Update the PWM output with the calculated duty cycle 
     left_motor_control_signal.write(leftMotorDutyCycle);
     right_motor_control_signal.write(rightMotorDutyCycle); 
